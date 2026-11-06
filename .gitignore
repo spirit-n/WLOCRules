@@ -1,0 +1,17 @@
+/package/
+/fixtures/
+/ldid.exe
+/ldid
+*.tipa
+*.ipa
+*.sqlite*
+*.db
+*.db-*
+*.pem
+*.key
+*.p12
+*.mobileprovision
+*.log
+.env
+.env.*
+__pycache__/

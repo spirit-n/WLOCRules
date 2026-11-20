@@ -64,9 +64,13 @@ def build_package(ldid):
     verify_entitlements(verify_macho(binary), plistlib.loads(entitlements.read_bytes()))
 
     prefix = 'Payload/WLOCRules.app/'
+    entries = [('WLOCRules', binary, 0o100755), ('Info.plist', info, 0o100644)]
+    for language in ('en', 'zh-Hans'):
+        resource = f'{language}.lproj/InfoPlist.strings'
+        entries.append((resource, (app / resource).read_bytes(), 0o100644))
     output = BytesIO()
     with zipfile.ZipFile(output, 'w') as archive:
-        for name, data, mode in [('WLOCRules', binary, 0o100755), ('Info.plist', info, 0o100644)]:
+        for name, data, mode in entries:
             entry = zipfile.ZipInfo(prefix + name)
             entry.create_system = 3
             entry.external_attr = mode << 16

@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include "rules.h"
 #include "localization.h"
+#include "helper.h"
 
 static NSString *localized(const char *english, const char *chinese) {
     return [NSString stringWithUTF8String:wloc_text(english, chinese)];
@@ -61,8 +62,8 @@ static NSString *run_helper(NSString *command, BOOL *success) {
     if (!error) error = posix_spawn_file_actions_addclose(&actions, output[0]);
     if (!error) error = posix_spawn_file_actions_addclose(&actions, output[1]);
     NSString *path = NSBundle.mainBundle.executablePath;
-    char *arguments[] = {(char *)path.fileSystemRepresentation, (char *)command.UTF8String,
-                        (char *)wloc_text("en", "zh-Hans"), NULL};
+    NSString *helperCommand = [NSString stringWithFormat:@"%@:%s", command, wloc_language()];
+    char *arguments[] = {(char *)path.fileSystemRepresentation, (char *)helperCommand.UTF8String, NULL};
     char *environment[] = {NULL};
     pid_t child = 0;
     if (!error) error = posix_spawn(&child, arguments[0], &actions, &attributes, arguments, environment);
@@ -137,7 +138,8 @@ static NSString *run_helper(NSString *command, BOOL *success) {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.systemBackgroundColor;
     UILabel *title = [UILabel new];
-    title.text = localized("WLOC Rules", "WLOC 规则工具");
+    title.text = [NSString stringWithFormat:@"%@ %@", localized("WLOC Rules", "WLOC 规则工具"),
+                  NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]];
     title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle1];
     UILabel *detail = [UILabel new];
     detail.text = localized("For rules database v131. Apply saves a backup first. Restore only adds back the target rule.",
@@ -176,7 +178,9 @@ static NSString *run_helper(NSString *command, BOOL *success) {
         BOOL ok;
         NSString *log = run_helper(command, &ok);
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.logView.text = [NSString stringWithFormat:@"%@\n\n%@",
+            self.logView.text = [NSString stringWithFormat:localized("App: WLOCRules %@ · %s\n%@\n\n%@",
+                                                                   "应用：WLOCRules %@ · %s\n%@\n\n%@"),
+                NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"], wloc_language(),
                 ok ? localized("Operation completed", "操作完成") : localized("Operation failed", "操作失败"), log];
             for (UIButton *button in self.buttons) button.enabled = YES;
         });
@@ -222,13 +226,15 @@ static NSString *run_helper(NSString *command, BOOL *success) {
 @end
 
 int main(int argc, char *argv[]) {
-    if ((argc == 2 || argc == 3) && (strcmp(argv[1], "check") == 0 || strcmp(argv[1], "apply") == 0 ||
-                     strcmp(argv[1], "restore") == 0)) {
-        wloc_set_language(argc == 3 ? argv[2] : "en");
-        if (geteuid() == 0) show_trustd_entitlements();
-        return run_rules_command(argv[1]);
-    }
     @autoreleasepool {
+        const char *command = wloc_helper_command(argc, argv);
+        if (command) {
+            NSString *version = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"unknown";
+            fprintf(stderr, wloc_text("Helper: WLOCRules %s · %s\n", "辅助进程：WLOCRules %s · %s\n"),
+                    version.UTF8String, wloc_language());
+            if (geteuid() == 0) show_trustd_entitlements();
+            return run_rules_command(command);
+        }
         NSString *language = NSLocale.preferredLanguages.firstObject ?: @"en";
         NSDictionary *parts = [NSLocale componentsFromLocaleIdentifier:language];
         NSString *script = parts[NSLocaleScriptCode];

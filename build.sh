@@ -14,8 +14,9 @@ flags=(-target arm64-apple-ios15.0 -isysroot "$sdk" -Os -Wall -Wextra -Werror)
 "$clang" "${flags[@]}" -fobjc-arc -fblocks -c main.m -o package/main.o
 "$clang" "${flags[@]}" -c rules.c -o package/rules.o
 "$clang" "${flags[@]}" -c localization.c -o package/localization.o
+"$clang" "${flags[@]}" -c helper.c -o package/helper.o
 "$linker" -arch arm64 -platform_version ios 15.0 15.6 \
-    -syslibroot "$sdk" -o "$bundle/WLOCRules" package/main.o package/rules.o package/localization.o \
+    -syslibroot "$sdk" -o "$bundle/WLOCRules" package/main.o package/rules.o package/localization.o package/helper.o \
     -framework UIKit -framework Foundation -framework Security -framework CoreFoundation \
     -lsqlite3 -lSystem -lobjc
 cp Info.plist "$bundle/Info.plist"

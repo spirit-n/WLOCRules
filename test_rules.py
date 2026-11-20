@@ -62,15 +62,14 @@ with tempfile.TemporaryDirectory(prefix='wloc-helper-test-') as directory:
         shutil.copyfile(header, temp / 'sqlite3.h')
     harness = temp / 'harness.c'
     harness.write_text(
-        '#include "rules.h"\n#include "localization.h"\n'
+        '#include "rules.h"\n#include "helper.h"\n'
         'int main(int argc, char **argv) {\n'
-        '    if (argc != 2 && argc != 3) return 64;\n'
-        '    wloc_set_language(argc == 3 ? argv[2] : "en");\n'
-        '    return run_rules_command(argv[1]);\n}\n'
+        '    const char *command = wloc_helper_command(argc, argv);\n'
+        '    return command ? run_rules_command(command) : 64;\n}\n'
     )
     subprocess.run(['gcc','-std=gnu11','-Wall','-Wextra','-Werror','-I',str(root),'-I',str(temp),
                     f'-DWLOC_LIVE_DB="{live}"', f'-DWLOC_BACKUP_DB="{backup}"',
-                    str(harness), str(root / 'rules.c'), str(root / 'localization.c'),
+                    str(harness), str(root / 'rules.c'), str(root / 'localization.c'), str(root / 'helper.c'),
                     '-l:libsqlite3.so.0', '-o', str(binary)], check=True)
     baseline = contents(sample)
     expected = baseline[:2] + ([row for row in baseline[2] if row[:3] != target],)
@@ -119,6 +118,19 @@ with tempfile.TemporaryDirectory(prefix='wloc-helper-test-') as directory:
     assert '恢复完成' in run('restore', language='zh-Hans')
     assert contents(live) == baseline
     print('PASS Simplified Chinese logs and English fallback, apply and restore')
+
+    reset()
+    assert '目标规则：存在' in run('check:zh-Hans')
+    assert 'Target rule: present' in run('check:en')
+    for invalid in ('check:', 'check:fr', 'check:zh-Hans:en', 'invalid:zh-Hans'):
+        run(invalid, 64)
+    run('check:zh-Hans', 64, language='en')
+    assert contents(live) == baseline and not backup.exists()
+    assert '修改完成' in run('apply:zh-Hans')
+    assert contents(live) == expected and contents(backup) == baseline
+    assert '恢复完成' in run('restore:zh-Hans')
+    assert contents(live) == baseline
+    print('PASS app helper command protocol, Chinese/English logs and invalid arguments')
 
     reset()
     with closing(sqlite3.connect(live)) as db, db:

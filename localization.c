@@ -8,6 +8,10 @@ void wloc_set_language(const char *language) {
     simplified_chinese = language && strcmp(language, "zh-Hans") == 0;
 }
 
+const char *wloc_language(void) {
+    return simplified_chinese ? "zh-Hans" : "en";
+}
+
 const char *wloc_text(const char *english, const char *chinese) {
     return simplified_chinese ? chinese : english;
 }

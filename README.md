@@ -12,6 +12,8 @@ WLOCRules 是一个通过 TrollStore 安装的 iOS 工具，用于检查、移�
 
 界面、按钮、确认提示和运行日志会跟随设备的首选语言。简体中文显示中文，其他语言显示英文。系统错误和 SQLite 错误同时保留错误码，便于排查。
 
+v1.3.3 起，日志开头会分别显示应用与辅助进程的版本和语言。中文为 `zh-Hans`，英文为 `en`，反馈问题时可附上这两行。
+
 1. 使用 TrollStore 安装自行构建的 `.tipa`。[TrollStore 项目](https://github.com/opa334/TrollStore)
 2. 点击 **检查（只读）**，查看规则状态和写权限。`目标规则：存在`（英文为 `Target rule: present`）表示规则存在。若日志显示系统拒绝打开数据库进行读写，请先排查权限。
 3. 点击 **应用修改**。工具会先在 `/private/var/root/wloc-pinning-v131.sqlite3` 保存备份，再通过 SQLite 事务删除目标规则。

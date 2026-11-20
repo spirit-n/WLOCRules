@@ -1,0 +1,125 @@
+name: Build WLOCRules
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      artifact: ${{ steps.version.outputs.artifact }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Read app version and validate release tag
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          import plistlib
+          import re
+          from pathlib import Path
+
+          version = plistlib.loads(Path('Info.plist').read_bytes())['CFBundleShortVersionString']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+              raise SystemExit('App version must have the form X.Y.Z')
+          if os.environ['GITHUB_REF_TYPE'] == 'tag' and os.environ['GITHUB_REF_NAME'] != f'v{version}':
+              raise SystemExit('Release tag must match the version in Info.plist')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'artifact=WLOCRules-v{version}\n')
+              output.write(f'filename=WLOCRules-v131-{version}.tipa\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as environment:
+              environment.write(f'WLOC_SDK={os.environ["RUNNER_TEMP"]}/ios-sdks/iPhoneOS15.6.sdk\n')
+              environment.write(f'WLOC_LDID={os.environ["RUNNER_TEMP"]}/ldid\n')
+          PY
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 gcc libsqlite3-dev
+
+      - name: Download pinned iOS SDK
+        run: |
+          git init "$RUNNER_TEMP/ios-sdks"
+          git -C "$RUNNER_TEMP/ios-sdks" remote add origin https://github.com/theos/sdks.git
+          git -C "$RUNNER_TEMP/ios-sdks" config core.autocrlf false
+          git -C "$RUNNER_TEMP/ios-sdks" config core.symlinks true
+          git -C "$RUNNER_TEMP/ios-sdks" sparse-checkout set iPhoneOS15.6.sdk
+          git -C "$RUNNER_TEMP/ios-sdks" fetch --depth=1 --filter=blob:none origin 0222fd5413cf4b9af096f37b4621afa2688572f7
+          git -C "$RUNNER_TEMP/ios-sdks" checkout --detach FETCH_HEAD
+
+      - name: Download and verify ldid
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus8/ldid_linux_x86_64 \
+            --output "$WLOC_LDID"
+          echo "d7d8c8b06ec913b2778e3e2e0306b5383e83fafe994a3f8acf25f4a525e2a9e9  $WLOC_LDID" | sha256sum --check
+          chmod +x "$WLOC_LDID"
+
+      - name: Test database operations and languages
+        run: sudo --preserve-env=WLOC_SDK python3 test_rules.py
+
+      - name: Build and package
+        env:
+          PACKAGE_FILENAME: ${{ steps.version.outputs.filename }}
+        run: |
+          bash build.sh
+          mkdir -p dist
+          python3 package.py "dist/$PACKAGE_FILENAME"
+          (cd dist && sha256sum "$PACKAGE_FILENAME" > SHA256SUMS)
+
+      - name: Upload installation package and checksum
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.version.outputs.artifact }}
+          path: |
+            dist/*.tipa
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: dist
+
+      - name: Create or update release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          if draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft); then
+            if [[ "$draft" != true ]]; then
+              echo "::notice::Release $GITHUB_REF_NAME is already published."
+              exit 0
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --draft \
+              --title "WLOCRules $GITHUB_REF_NAME" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/*.tipa dist/SHA256SUMS --clobber

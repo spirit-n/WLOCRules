@@ -42,7 +42,7 @@ jobs:
               raise SystemExit('Release tag must match the version in Info.plist')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'artifact=WLOCRules-v{version}\n')
-              output.write(f'filename=WLOCRules-v131-{version}.tipa\n')
+              output.write(f'filename=WLOCRules-v{version}.tipa\n')
           with open(os.environ['GITHUB_ENV'], 'a') as environment:
               environment.write(f'WLOC_SDK={os.environ["RUNNER_TEMP"]}/ios-sdks/iPhoneOS15.6.sdk\n')
               environment.write(f'WLOC_LDID={os.environ["RUNNER_TEMP"]}/ldid\n')

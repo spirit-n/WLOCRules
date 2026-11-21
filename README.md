@@ -49,6 +49,8 @@ python .\package.py --ldid 'C:\path\to\ldid.exe' WLOCRules.tipa
 
 推送到 `main`、提交 PR，或在 Actions 页面手动运行 **Build WLOCRules**，都会执行数据库与语言测试，随后构建并签名打包。运行成功后，在该次运行的 **Artifacts** 中下载 `.tipa` 和 `SHA256SUMS`。构建产物保留 30 天。
 
+安装包统一按应用版本命名，例如 `WLOCRules-v1.3.3.tipa`。规则库兼容要求在本文的兼容性部分及 Release 说明中列出。
+
 工作流使用 Ubuntu 24.04、Clang/LLD 18、固定提交的 iOS 15.6 SDK，以及通过 SHA-256 校验的 ldid。TrollStore 使用的签名通过 ldid 完成，工作流直接使用 GitHub 提供的令牌。
 
 发布新版本时，先更新 `Info.plist` 中的版本，再推送对应标签。标签必须与应用版本一致，例如版本为 `1.3.2` 时执行以下命令。
